@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>İşlem Defteri</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0f1a;
+      --surface: #131926;
+      --surface-2: #1a2235;
+      --border: #253044;
+      --text: #e8edf5;
+      --muted: #7d8da3;
+      --muted-2: #556178;
+      --gold: #d4a44a;
+      --gold-soft: #2d2818;
+      --gain: #3ba876;
+      --gain-bg: #0f211a;
+      --loss: #d4655e;
+      --loss-bg: #231514;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-variant-numeric: tabular-nums;
+      min-height: 100vh;
+      padding: 32px 16px 80px;
+      line-height: 1.5;
+    }
+
+    .container { max-width: 800px; margin: 0 auto; }
+
+    header { margin-bottom: 32px; }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
+    .subtitle { color: var(--muted); font-size: 14px; }
+
+    section { margin-bottom: 28px; }
+    h2 { font-size: 17px; font-weight: 600; margin-bottom: 14px; }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .section-header h2 { margin-bottom: 0; }
+
+    /* Dropzone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .dropzone:hover, .dropzone.drag {
+      border-color: var(--gold);
+      background: var(--surface-2);
+    }
+    .dropzone-icon {
+      width: 48px; height: 48px;
+      border-radius: 10px;
+      background: var(--gold-soft);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--gold);
+      flex-shrink: 0;
+    }
+    .dropzone-text strong { display: block; font-size: 15px; font-weight: 600; }
+    .dropzone-text span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+    input[type="file"] { display: none; }
+
+    /* Status */
+    .status { margin-top: 12px; font-size: 13px; color: var(--muted); min-height: 20px; }
+    .status.error { color: var(--loss); }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Review */
+    .review-section {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .review-section.hidden { display: none; }
+
+    /* Table */
+    .table-wrapper { overflow-x: auto; margin: 0 -20px; padding: 0 20px; }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .data-table th {
+      text-align: left; padding: 10px 12px;
+      color: var(--muted-2); font-weight: 500; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table input, .data-table select {
+      background: var(--surface-2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 8px; padding: 6px 8px;
+      font-size: 13px; font-family: inherit; width: 100%;
+    }
+    .data-table input:focus, .data-table select:focus {
+      outline: none; border-color: var(--gold);
+    }
+    .data-table td.num { width: 100px; }
+    .data-table td.num input { width: 90px; }
+
+    /* Buttons */
+    .review-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .btn {
+      padding: 10px 18px; border-radius: 8px; font-size: 13px;
+      font-weight: 600; font-family: inherit; cursor: pointer; border: none;
+      transition: all 0.15s ease;
+    }
+    .btn-primary { background: var(--gold); color: #1a1305; }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-secondary {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { color: var(--text); border-color: var(--muted-2); }
+
+    /* Filters */
+    .filters-section { display: flex; gap: 12px; flex-wrap: wrap; }
+    .filter-group { display: flex; flex-direction: column; }
+    .filter-group label {
+      font-size: 11px; color: var(--muted-2); margin-bottom: 6px;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .filter-group select, .filter-group input[type="date"] {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 10px 12px; border-radius: 8px;
+      font-size: 13px; font-family: inherit; min-width: 140px;
+    }
+    .filter-group select:focus, .filter-group input[type="date"]:focus {
+      outline: none; border-color: var(--gold);
+    }
+
+    /* Summary */
+    .summary-grid { display: flex; flex-direction: column; gap: 10px; }
+    .summary-card {
+      border: 1px solid var(--border); background: var(--surface);
+      border-radius: 12px; padding: 16px 18px;
+      display: flex; justify-content: space-between;
+      align-items: center; gap: 16px;
+    }
+    .summary-left strong { font-size: 15px; letter-spacing: 0.02em; }
+    .summary-left .note { display: block; font-size: 12px; color: var(--muted-2); margin-top: 4px; }
+    .summary-right { text-align: right; }
+    .summary-right .amount { font-size: 16px; font-weight: 700; }
+    .summary-right .amount.gain { color: var(--gain); }
+    .summary-right .amount.loss { color: var(--loss); }
+    .summary-right .percent { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 20px;
+      background: var(--surface-2); color: var(--muted);
+    }
+
+    /* Ledger */
+    .ledger {
+      border: 1px solid var(--border); background: var(--surface);
+      border-radius: 12px; overflow: hidden;
+    }
+    .ledger-actions { display: flex; gap: 8px; }
+    .ledger-row {
+      display: flex; justify-content: space-between;
+      align-items: center; padding: 14px 18px;
+      border-bottom: 1px solid var(--border); gap: 12px;
+    }
+    .ledger-row:last-child { border-bottom: none; }
+    .ledger-row .left strong { font-size: 14px; }
+    .type-badge {
+      font-size: 10px; padding: 2px 8px; border-radius: 20px;
+      margin-left: 8px; vertical-align: middle;
+    }
+    .type-badge.buy { background: var(--gain-bg); color: var(--gain); }
+    .type-badge.sell { background: var(--loss-bg); color: var(--loss); }
+    .ledger-row .meta { font-size: 12px; color: var(--muted-2); margin-top: 4px; }
+    .ledger-row .right {
+      text-align: right; font-size: 14px; font-weight: 600; white-space: nowrap;
+    }
+    .ledger-row .right .qty {
+      display: block; font-size: 11px; font-weight: 400;
+      color: var(--muted-2); margin-top: 2px;
+    }
+    .ledger-row .delete-btn {
+      background: none; border: none; color: var(--muted-2);
+      cursor: pointer; font-size: 18px; padding: 4px; line-height: 1;
+      opacity: 0.6; transition: opacity 0.15s;
+    }
+    .ledger-row .delete-btn:hover { opacity: 1; color: var(--loss); }
+
+    .empty-state { text-align: center; color: var(--muted-2); font-size: 14px; padding: 40px 20px; }
+
+    @media (max-width: 600px) {
+      body { padding: 20px 12px 60px; }
+      h1 { font-size: 24px; }
+      .filters-section { flex-direction: column; }
+      .filter-group select, .filter-group input[type="date"] { width: 100%; }
+      .summary-card { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .summary-right { text-align: left; }
+      .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .ledger-actions { width: 100%; }
+      .ledger-actions .btn { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>İşlem Defteri</h1>
+      <p class="subtitle">Yatırım ekranının fotoğrafını yükle, işlemler otomatik okunsun.</p>
+    </header>
+
+    <section class="upload-section">
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 16V4M12 4l-4 4M12 4l4 4"/>
+            <path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>
+          </svg>
+        </div>
+        <div class="dropzone-text">
+          <strong>Ekstre görseli yükle</strong>
+          <span>Tıkla ya da sürükle bırak — JPG, PNG</span>
+        </div>
+        <input type="file" id="fileInput" accept="image/*">
+      </div>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="review-section hidden" id="reviewSection">
+      <div class="section-header">
+        <h2>Okunan İşlemler</h2>
+        <span class="badge" id="reviewCount">0 satır</span>
+      </div>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tarih</th>
+              <th>Hisse</th>
+              <th>Tip</th>
+              <th>Tutar (₺)</th>
+              <th>Adet</th>
+              <th>Durum</th>
+            </tr>
+          </thead>
+          <tbody id="reviewBody"></tbody>
+        </table>
+      </div>
+      <div class="review-actions">
+        <button class="btn btn-primary" id="saveBtn">Kaydet</button>
+        <button class="btn btn-secondary" id="discardBtn">Vazgeç</button>
+      </div>
+    </section>
+
+    <section class="filters-section">
+      <div class="filter-group">
+        <label>Hisse</label>
+        <select id="filterHisse"><option value="">Tümü</option></select>
+      </div>
+      <div class="filter-group">
+        <label>Başlangıç</label>
+        <input type="date" id="filterStart">
+      </div>
+      <div class="filter-group">
+        <label>Bitiş</label>
+        <input type="date" id="filterEnd">
+      </div>
+    </section>
+
+    <section class="summary-section">
+      <h2>Hisse Bazlı Kâr / Zarar</h2>
+      <div class="summary-grid" id="summaryGrid">
+        <div class="empty-state">Henüz veri yok</div>
+      </div>
+    </section>
+
+    <section class="ledger-section">
+      <div class="section-header">
+        <h2>İşlemler</h2>
+        <div class="ledger-actions">
+          <button class="btn btn-secondary" id="csvBtn">CSV İndir</button>
+          <button class="btn btn-secondary" id="loadDriveBtn">Drive'dan Yükle</button>
+          <button class="btn btn-secondary" id="sheetsBtn">Drive'a Yedekle</button>
+        </div>
+      </div>
+      <div class="ledger" id="ledger">
+        <div class="empty-state">Henüz kayıtlı işlem yok</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const API_URL = "https://script.google.com/macros/s/AKfycby83_QdmeLKleIl2vdKPtb12UeE9akYO5-FlqmxCTRbi92yjTMTXc8G-TKtj9UbkM4/exec";
+    const STORAGE_KEY = "islemler:v1";
+
+    let transactions = [];
+    let pendingRows = [];
+
+    const $ = id => document.getElementById(id);
+    const fileInput = $("fileInput");
+    const dropzone = $("dropzone");
+    const status = $("status");
+
+    // Event Listeners
+    dropzone.addEventListener("click", () => fileInput.click());
+    dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("drag"); });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+    dropzone.addEventListener("drop", e => {
+      e.preventDefault(); dropzone.classList.remove("drag");
+      if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener("change", e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+    $("saveBtn").addEventListener("click", () => commitSave(pendingRows));
+    $("discardBtn").addEventListener("click", discardPending);
+    $("csvBtn").addEventListener("click", exportCSV);
+    $("sheetsBtn").addEventListener("click", backupToDrive);
+    $("loadDriveBtn").addEventListener("click", loadFromDrive);
+    $("filterHisse").addEventListener("change", render);
+    $("filterStart").addEventListener("change", render);
+    $("filterEnd").addEventListener("change", render);
+
+    function setStatus(html, isError = false) {
+      status.innerHTML = html;
+      status.className = "status" + (isError ? " error" : "");
+    }
+
+    // Satış olarak sayılacak türler
+    const SELL_TYPES = ["satış", "satis", "kar al", "kâr al", "zarar durdur", "stop loss", "take profit", "tp", "sl"];
+    const BUY_TYPES = ["alış", "alis"];
+
+    function normalizeTip(tip) {
+      const lower = (tip || "").toLowerCase().trim();
+      if (BUY_TYPES.some(t => lower.includes(t))) return "Alış";
+      if (SELL_TYPES.some(t => lower.includes(t))) return "Satış";
+      return tip || "Diğer";
+    }
+
+    async function handleFile(file) {
+      const startTime = Date.now();
+      setStatus('<span class="spinner"></span> Görsel küçültülüyor ve sıkıştırılıyor...');
+
+      try {
+        setStatus('<span class="spinner"></span> Gemini API ile okunuyor... (10-30 sn)');
+        const b64 = await fileToBase64(file);
+        const rows = await extractTransactions(b64, file.type || "image/jpeg");
+
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        if (!rows.length) {
+          setStatus("Görselde okunabilir bir işlem bulunamadı.", true);
+          return;
+        }
+
+        pendingRows = rows;
+        renderReview(rows);
+        setStatus(`${rows.length} işlem okundu (${elapsed} sn). Kaydetmeden önce kontrol edebilirsin.`);
+      } catch (err) {
+        console.error(err);
+        setStatus(err.message || "Okuma sırasında bir hata oluştu.", true);
+      }
+
+      fileInput.value = "";
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        // Görseli küçült ve sıkıştır
+        const img = new Image();
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+
+        img.onload = () => {
+          // Maks boyut: 1200px (büyük görseller için)
+          const MAX = 1200;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            const scale = Math.min(MAX / w, MAX / h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+          }
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(img, 0, 0, w, h);
+
+          // JPEG olarak sıkıştır (kalite: %70)
+          canvas.toBlob(blob => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error("Dosya okunamadı"));
+            reader.onload = () => resolve(reader.result.split(",")[1]);
+            reader.readAsDataURL(blob);
+          }, "image/jpeg", 0.7);
+        };
+
+        img.onerror = () => reject(new Error("Görsel yüklenemedi"));
+        img.src = URL.createObjectURL(file);
+      });
+    }
+
+    async function extractTransactions(base64, mediaType) {
+      const MAX_RETRIES = 2;
+      const RETRY_DELAY = 3000;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          setStatus(`<span class="spinner"></span> Tekrar deneniyor... (${attempt}/${MAX_RETRIES})`);
+          await new Promise(r => setTimeout(r, RETRY_DELAY));
+        }
+
+        let resp;
+        try {
+          resp = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ image: base64, mediaType })
+          });
+        } catch (e) {
+          if (attempt < MAX_RETRIES) continue;
+          throw new Error("Ağ hatası: İnternet bağlantınızı kontrol edin.");
+        }
+
+        const text = await resp.text();
+
+        if (text.startsWith("<!DOCTYPE") || text.startsWith("<html")) {
+          if (attempt < MAX_RETRIES) continue;
+          throw new Error("Apps Script hatası: URL'i kontrol edin veya deploy'u yenileyin.");
+        }
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          if (attempt < MAX_RETRIES) continue;
+          throw new Error("Yanıt ayrıştırılamadı: " + text.substring(0, 100));
+        }
+
+        if (!resp.ok || data.error) {
+          const errMsg = data.error?.message || `HTTP ${resp.status}`;
+          // Rate limit veya geçici hata ise tekrar dene
+          if (attempt < MAX_RETRIES && (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("unavailable") || errMsg.includes("temporarily"))) {
+            continue;
+          }
+          throw new Error(errMsg);
+        }
+
+        if (!Array.isArray(data.rows)) {
+          throw new Error("Beklenmeyen yanıt biçimi");
+        }
+
+        return data.rows.map(r => ({
+          tarih: r.tarih || "",
+          hisse: (r.hisse || "").toUpperCase().trim(),
+          tip: normalizeTip(r.tip),
+          tutar: Number(r.tutar) || 0,
+          adet: r.adet === null || r.adet === undefined ? null : Number(r.adet),
+          durum: r.durum || "Gerçekleşti",
+          id: crypto.randomUUID()
+        })).filter(r => r.hisse);
+      }
+
+      throw new Error("Tüm denemeler başarısız oldu. Lütfen tekrar deneyin.");
+    }
+
+    function renderReview(rows) {
+      const tbody = $("reviewBody");
+      tbody.innerHTML = "";
+
+      rows.forEach((r, i) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input data-i="${i}" data-f="tarih" type="date" value="${r.tarih}"></td>
+          <td><input data-i="${i}" data-f="hisse" value="${r.hisse}"></td>
+          <td>
+            <select data-i="${i}" data-f="tip">
+              <option ${r.tip === "Alış" ? "selected" : ""}>Alış</option>
+              <option ${r.tip === "Satış" ? "selected" : ""}>Satış</option>
+              <option ${r.tip === "Diğer" ? "selected" : ""}>Diğer</option>
+            </select>
+          </td>
+          <td class="num"><input data-i="${i}" data-f="tutar" type="number" value="${r.tutar}"></td>
+          <td class="num"><input data-i="${i}" data-f="adet" type="number" value="${r.adet ?? ""}" placeholder="—"></td>
+          <td>
+            <select data-i="${i}" data-f="durum">
+              <option ${r.durum === "Gerçekleşti" ? "selected" : ""}>Gerçekleşti</option>
+              <option ${r.durum === "İptal Edildi" ? "selected" : ""}>İptal Edildi</option>
+            </select>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      tbody.querySelectorAll("input, select").forEach(el => {
+        el.addEventListener("input", e => {
+          const i = +e.target.dataset.i;
+          const f = e.target.dataset.f;
+          let v = e.target.value;
+          if (f === "tutar") v = Number(v) || 0;
+          if (f === "adet") v = v === "" ? null : Number(v);
+          pendingRows[i][f] = v;
+        });
+      });
+
+      $("reviewCount").textContent = `${rows.length} satır`;
+      $("reviewSection").classList.remove("hidden");
+    }
+
+    function discardPending() {
+      pendingRows = [];
+      $("reviewSection").classList.add("hidden");
+      setStatus("");
+    }
+
+    function commitSave(rowsToSave) {
+      transactions = transactions.concat(rowsToSave);
+      persist();
+      pendingRows = [];
+      $("reviewSection").classList.add("hidden");
+      setStatus(`${rowsToSave.length} işlem kaydedildi.`);
+      populateFilters();
+      render();
+    }
+
+    function persist() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions)); }
+      catch (e) { console.error("localStorage hatası:", e); }
+    }
+
+    function load() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        transactions = raw ? JSON.parse(raw) : [];
+      } catch (e) { transactions = []; }
+      populateFilters();
+      render();
+      // Arka planda Drive'dan yükle
+      loadFromDriveSilent();
+    }
+
+    async function loadFromDriveSilent() {
+      try {
+        const resp = await fetch(API_URL + "?action=read");
+        const data = await resp.json();
+        if (data.error || !data.rows || !data.rows.length) return;
+
+        const existingIds = new Set(transactions.map(t => t.id));
+        let newCount = 0;
+
+        for (const r of data.rows) {
+          if (r.id && !existingIds.has(r.id)) {
+            transactions.push({
+              tarih: r.tarih || "",
+              hisse: (r.hisse || "").toUpperCase().trim(),
+              tip: r.tip || "Diğer",
+              tutar: Number(r.tutar) || 0,
+              adet: r.adet === null || r.adet === undefined ? null : Number(r.adet),
+              durum: r.durum || "Gerçekleşti",
+              id: r.id || crypto.randomUUID()
+            });
+            newCount++;
+          }
+        }
+
+        if (newCount > 0) {
+          persist();
+          populateFilters();
+          render();
+          console.log("Drive'dan " + newCount + " yeni işlem senkronize edildi.");
+        }
+      } catch (e) {
+        // Sessizce başarısız ol, kullanıcıyı rahatsız etme
+      }
+    }
+
+    function populateFilters() {
+      const sel = $("filterHisse");
+      const current = sel.value;
+      const codes = [...new Set(transactions.map(t => t.hisse))].sort();
+      sel.innerHTML = '<option value="">Tümü</option>' +
+        codes.map(c => `<option value="${c}">${c}</option>`).join("");
+      sel.value = codes.includes(current) ? current : "";
+    }
+
+    function getFiltered() {
+      const hisse = $("filterHisse").value;
+      const start = $("filterStart").value;
+      const end = $("filterEnd").value;
+      return transactions.filter(t => {
+        if (hisse && t.hisse !== hisse) return false;
+        if (start && t.tarih < start) return false;
+        if (end && t.tarih > end) return false;
+        return true;
+      });
+    }
+
+    function fmtTL(n) {
+      return "₺" + n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatDate(iso) {
+      if (!iso) return "—";
+      const months = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
+      const [y, m, d] = iso.split("-").map(Number);
+      if (!y || !m || !d) return iso;
+      return `${d} ${months[m - 1]} ${y}`;
+    }
+
+    async function deleteTx(id) {
+      transactions = transactions.filter(t => t.id !== id);
+      persist();
+      populateFilters();
+      render();
+    }
+    window.deleteTx = deleteTx;
+
+    function render() {
+      const rows = getFiltered();
+      const sorted = [...rows].sort((a, b) => (b.tarih || "").localeCompare(a.tarih || ""));
+
+      const ledger = $("ledger");
+      if (!sorted.length) {
+        ledger.innerHTML = '<div class="empty-state">Henüz kayıtlı işlem yok</div>';
+      } else {
+        ledger.innerHTML = sorted.map(t => {
+          const typeClass = t.tip === "Alış" ? "buy" : (t.tip === "Satış" ? "sell" : "");
+          return `
+            <div class="ledger-row">
+              <div class="left">
+                <strong>${t.hisse}<span class="type-badge ${typeClass}">${t.tip}</span></strong>
+                <div class="meta">${formatDate(t.tarih)}${t.durum === "İptal Edildi" ? " · İptal" : ""}</div>
+              </div>
+              <div class="right">
+                ${fmtTL(t.tutar)}
+                ${t.adet !== null
+                  ? `<span class="qty">${t.adet} adet · ${fmtTL(t.tutar / t.adet)}</span>`
+                  : `<span class="qty">adet belirtilmedi</span>`}
+              </div>
+              <button class="delete-btn" onclick="deleteTx('${t.id}')" title="Sil">✕</button>
+            </div>
+          `;
+        }).join("");
+      }
+
+      const summaries = computeSummaries(rows);
+      const sg = $("summaryGrid");
+
+      if (!summaries.length) {
+        sg.innerHTML = '<div class="empty-state">Filtreye uyan hisse yok</div>';
+      } else {
+        sg.innerHTML = summaries.map(s => {
+          if (s.status === "open") {
+            return `
+              <div class="summary-card">
+                <div class="summary-left">
+                  <strong>${s.hisse}</strong>
+                  <span class="note">Açık pozisyon · henüz satış yok</span>
+                </div>
+                <div class="summary-right">
+                  <div class="amount">${fmtTL(s.buyTutar)}</div>
+                  <div class="percent">alım tutarı</div>
+                </div>
+              </div>
+            `;
+          }
+          const gain = s.karZarar >= 0;
+          if (s.status === "precise") {
+            return `
+              <div class="summary-card">
+                <div class="summary-left">
+                  <strong>${s.hisse}</strong>
+                  <span class="note">${s.matchedQty} adet eşleşti · ort. alış ${fmtTL(s.avgBuy)} → satış ${fmtTL(s.avgSell)}</span>
+                </div>
+                <div class="summary-right">
+                  <div class="amount ${gain ? "gain" : "loss"}">${gain ? "+" : ""}${fmtTL(s.karZarar)}</div>
+                  <div class="percent">${gain ? "+" : ""}${s.pct.toFixed(1)}%</div>
+                </div>
+              </div>
+            `;
+          }
+          return `
+            <div class="summary-card">
+              <div class="summary-left">
+                <strong>${s.hisse}<span class="badge">yaklaşık</span></strong>
+                <span class="note">Adet bilgisi eksik · tutar farkına göre</span>
+              </div>
+              <div class="summary-right">
+                <div class="amount ${gain ? "gain" : "loss"}">${gain ? "+" : ""}${fmtTL(s.karZarar)}</div>
+              </div>
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    function computeSummaries(rows) {
+      const active = rows.filter(t => t.durum !== "İptal Edildi" && (t.tip === "Alış" || t.tip === "Satış"));
+      const byHisse = {};
+      active.forEach(t => { (byHisse[t.hisse] ||= []).push(t); });
+
+      return Object.entries(byHisse).map(([hisse, list]) => {
+        const buys = list.filter(t => t.tip === "Alış");
+        const sells = list.filter(t => t.tip === "Satış");
+        const buyTutar = buys.reduce((s, t) => s + t.tutar, 0);
+        const sellTutar = sells.reduce((s, t) => s + t.tutar, 0);
+
+        if (!sells.length) return { hisse, status: "open", buyTutar };
+
+        const buyQtyKnown = buys.length > 0 && buys.every(t => t.adet !== null && t.adet > 0);
+        const sellQtyKnown = sells.length > 0 && sells.every(t => t.adet !== null && t.adet > 0);
+
+        if (buyQtyKnown && sellQtyKnown) {
+          const buyQty = buys.reduce((s, t) => s + t.adet, 0);
+          const sellQty = sells.reduce((s, t) => s + t.adet, 0);
+          const avgBuy = buyTutar / buyQty;
+          const avgSell = sellTutar / sellQty;
+          const matchedQty = Math.min(buyQty, sellQty);
+          const karZarar = (avgSell - avgBuy) * matchedQty;
+          const pct = (avgSell - avgBuy) / avgBuy * 100;
+          return { hisse, status: "precise", karZarar, pct, matchedQty, avgBuy, avgSell };
+        }
+
+        return { hisse, status: "approx", karZarar: sellTutar - buyTutar, buyTutar, sellTutar };
+      });
+    }
+
+    function exportCSV() {
+      const list = [...getFiltered()].sort((a, b) => (a.tarih || "").localeCompare(b.tarih || ""));
+      const esc = v => {
+        const s = (v === null || v === undefined ? "" : String(v));
+        return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      };
+      const lines = [["Tarih", "Hisse", "Tip", "Tutar", "Adet", "Durum"].join(";")]
+        .concat(list.map(t => [t.tarih, t.hisse, t.tip, t.tutar, t.adet === null ? "" : t.adet, t.durum].map(esc).join(";")));
+      const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "islemler-" + new Date().toISOString().slice(0, 10) + ".csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    async function loadFromDrive() {
+      setStatus('<span class="spinner"></span> Drive\'dan yükleniyor...');
+      try {
+        const resp = await fetch(API_URL + "?action=read");
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error.message);
+
+        const driveRows = data.rows || [];
+        if (!driveRows.length) {
+          setStatus("Drive'da kayıtlı işlem yok.");
+          return;
+        }
+
+        const existingIds = new Set(transactions.map(t => t.id));
+        let newCount = 0;
+
+        for (const r of driveRows) {
+          if (r.id && !existingIds.has(r.id)) {
+            transactions.push({
+              tarih: r.tarih || "",
+              hisse: (r.hisse || "").toUpperCase().trim(),
+              tip: r.tip || "Diğer",
+              tutar: Number(r.tutar) || 0,
+              adet: r.adet === null || r.adet === undefined ? null : Number(r.adet),
+              durum: r.durum || "Gerçekleşti",
+              id: r.id || crypto.randomUUID()
+            });
+            newCount++;
+          }
+        }
+
+        persist();
+        populateFilters();
+        render();
+        setStatus(`${driveRows.length} işlem bulundu. ${newCount > 0 ? newCount + " yenisi eklendi." : "Yeni işlem eklenmedi."}`);
+      } catch (err) {
+        setStatus("Drive'dan yüklenemedi: " + err.message, true);
+      }
+    }
+
+    async function backupToDrive() {
+      if (!transactions.length) {
+        setStatus("Kaydedilecek işlem yok.", true);
+        return;
+      }
+      setStatus('<span class="spinner"></span> Drive\'a aktarılıyor...');
+      try {
+        const resp = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: "save", rows: transactions })
+        });
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error.message);
+        let msg = "Yedek tamam: " + (data.saved || 0) + " yeni satır eklendi.";
+        if (data.skipped > 0) msg += " (" + data.skipped + " tekrar atlandı)";
+        if (data.total) msg += " Toplam: " + data.total + " satır.";
+        setStatus(msg);
+      } catch (err) {
+        setStatus("Yedekleme başarısız: " + err.message, true);
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
