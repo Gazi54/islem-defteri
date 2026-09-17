@@ -211,6 +211,41 @@
     }
     .ledger-row .delete-btn:hover { opacity: 1; color: var(--loss); }
 
+    /* Toplu İşlemler */
+    .bulk-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
+    .bulk-actions.hidden { display: none; }
+    .bulk-actions span { color: var(--muted); }
+    .btn-danger {
+      background: var(--loss);
+      color: white;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+    }
+    .btn-danger:hover { filter: brightness(1.1); }
+
+    .ledger-row .checkbox {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--gold);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
     /* Manuel Ekleme Formu */
     .add-section { margin-bottom: 28px; }
     .add-form {
@@ -394,6 +429,11 @@
           <button class="btn btn-secondary" id="sheetsBtn">Drive'a Yedekle</button>
         </div>
       </div>
+      <div class="bulk-actions hidden" id="bulkActions">
+        <span id="selectedCount">0 seçili</span>
+        <button class="btn btn-danger" id="bulkDeleteBtn">Seçilenleri Sil</button>
+        <button class="btn btn-secondary" id="clearSelectionBtn">Seçimi Kaldır</button>
+      </div>
       <div class="ledger" id="ledger">
         <div class="empty-state">Henüz kayıtlı işlem yok</div>
       </div>
@@ -504,9 +544,22 @@
           return;
         }
 
-        pendingRows = rows;
-        renderReview(rows);
-        setStatus(`${rows.length} işlem okundu (${elapsed} sn). Kaydetmeden önce kontrol edebilirsin.`);
+        // Mevcut işlemlerle tekrar kontrolü
+        const existingKeys = new Set(transactions.map(t => makeRowKey(t.tarih, t.hisse, t.tutar, t.adet)));
+        const newRows = rows.filter(r => !existingKeys.has(makeRowKey(r.tarih, r.hisse, r.tutar, r.adet)));
+        const dupCount = rows.length - newRows.length;
+
+        if (newRows.length === 0) {
+          setStatus(`Görseldeki tüm işlemler zaten kayıtlı (${rows.length} tekrar bulundu).`, true);
+          return;
+        }
+
+        pendingRows = newRows;
+        renderReview(newRows);
+        let msg = `${newRows.length} yeni işlem okundu (${elapsed} sn).`;
+        if (dupCount > 0) msg += ` ${dupCount} tekrar atlandı.`;
+        msg += " Kaydetmeden önce kontrol edebilirsin.";
+        setStatus(msg);
       } catch (err) {
         console.error(err);
         setStatus(err.message || "Okuma sırasında bir hata oluştu.", true);
@@ -813,11 +866,44 @@
 
     async function deleteTx(id) {
       transactions = transactions.filter(t => t.id !== id);
+      selectedIds.delete(id);
       persist();
       populateFilters();
       render();
     }
     window.deleteTx = deleteTx;
+
+    function updateBulkActions() {
+      const count = selectedIds.size;
+      $("selectedCount").textContent = `${count} seçili`;
+      if (count > 0) {
+        $("bulkActions").classList.remove("hidden");
+      } else {
+        $("bulkActions").classList.add("hidden");
+      }
+    }
+
+    function bulkDelete() {
+      if (!selectedIds.size) return;
+      if (!confirm(`${selectedIds.size} işlem silinecek. Emin misin?`)) return;
+      transactions = transactions.filter(t => !selectedIds.has(t.id));
+      selectedIds.clear();
+      persist();
+      populateFilters();
+      render();
+      setStatus("Seçilen işlemler silindi.");
+    }
+
+    function clearSelection() {
+      selectedIds.clear();
+      render();
+    }
+
+    // Toplu silme butonları
+    $("bulkDeleteBtn").addEventListener("click", bulkDelete);
+    $("clearSelectionBtn").addEventListener("click", clearSelection);
+
+    let selectedIds = new Set();
 
     function render() {
       const rows = getFiltered();
@@ -826,11 +912,13 @@
       const ledger = $("ledger");
       if (!sorted.length) {
         ledger.innerHTML = '<div class="empty-state">Henüz kayıtlı işlem yok</div>';
+        $("bulkActions").classList.add("hidden");
       } else {
         ledger.innerHTML = sorted.map(t => {
           const typeClass = t.tip === "Alış" ? "buy" : (t.tip === "Satış" ? "sell" : "");
           return `
             <div class="ledger-row">
+              <input type="checkbox" class="checkbox" data-id="${t.id}" ${selectedIds.has(t.id) ? "checked" : ""}>
               <div class="left">
                 <strong>${t.hisse}<span class="type-badge ${typeClass}">${t.tip}</span></strong>
                 <div class="meta">${formatDate(t.tarih)}${t.durum === "İptal Edildi" ? " · İptal" : ""}</div>
@@ -845,7 +933,22 @@
             </div>
           `;
         }).join("");
+
+        // Checkbox event listener'ları ekle
+        ledger.querySelectorAll(".checkbox").forEach(cb => {
+          cb.addEventListener("change", (e) => {
+            const id = e.target.dataset.id;
+            if (e.target.checked) {
+              selectedIds.add(id);
+            } else {
+              selectedIds.delete(id);
+            }
+            updateBulkActions();
+          });
+        });
       }
+
+      updateBulkActions();
 
       const summaries = computeSummaries(rows);
       const sg = $("summaryGrid");
