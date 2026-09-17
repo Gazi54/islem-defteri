@@ -211,6 +211,50 @@
     }
     .ledger-row .delete-btn:hover { opacity: 1; color: var(--loss); }
 
+    /* Manuel Ekleme Formu */
+    .add-section { margin-bottom: 28px; }
+    .add-form {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .add-form.hidden { display: none; }
+    .form-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-width: 120px;
+    }
+    .form-group label {
+      font-size: 11px;
+      color: var(--muted-2);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .form-group input,
+    .form-group select {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+
     .empty-state { text-align: center; color: var(--muted-2); font-size: 14px; padding: 40px 20px; }
 
     @media (max-width: 600px) {
@@ -273,6 +317,49 @@
       <div class="review-actions">
         <button class="btn btn-primary" id="saveBtn">Kaydet</button>
         <button class="btn btn-secondary" id="discardBtn">Vazgeç</button>
+      </div>
+    </section>
+
+    <!-- Manuel İşlem Ekleme -->
+    <section class="add-section">
+      <div class="section-header">
+        <h2>Manuel İşlem Ekle</h2>
+        <button class="btn btn-secondary" id="toggleAddBtn">+</button>
+      </div>
+      <div class="add-form hidden" id="addForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Tarih & Saat</label>
+            <input type="datetime-local" id="addTarih">
+          </div>
+          <div class="form-group">
+            <label>Hisse</label>
+            <input type="text" id="addHisse" placeholder="Örn: ASELS" style="text-transform:uppercase">
+          </div>
+          <div class="form-group">
+            <label>Tip</label>
+            <select id="addTip">
+              <option>Alış</option>
+              <option>Satış</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tutar (₺)</label>
+            <input type="number" id="addTutar" placeholder="0.00" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>Adet</label>
+            <input type="number" id="addAdet" placeholder="Boş bırakabilirsin">
+          </div>
+          <div class="form-group">
+            <label>Durum</label>
+            <select id="addDurum">
+              <option>Gerçekleşti</option>
+              <option>İptal Edildi</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="addSaveBtn">İşlemi Ekle</button>
       </div>
     </section>
 
@@ -340,6 +427,11 @@
     $("csvBtn").addEventListener("click", exportCSV);
     $("sheetsBtn").addEventListener("click", backupToDrive);
     $("loadDriveBtn").addEventListener("click", loadFromDrive);
+    $("toggleAddBtn").addEventListener("click", () => {
+      $("addForm").classList.toggle("hidden");
+      $("toggleAddBtn").textContent = $("addForm").classList.contains("hidden") ? "+" : "−";
+    });
+    $("addSaveBtn").addEventListener("click", addManualTransaction);
     $("filterHisse").addEventListener("change", render);
     $("filterStart").addEventListener("change", render);
     $("filterEnd").addEventListener("change", render);
@@ -358,6 +450,14 @@
       if (BUY_TYPES.some(t => lower.includes(t))) return "Alış";
       if (SELL_TYPES.some(t => lower.includes(t))) return "Satış";
       return tip || "Diğer";
+    }
+
+    function makeRowKey(tarih, hisse, tutar, adet) {
+      const t = (tarih || "").split("T")[0];
+      const h = (hisse || "").toUpperCase().trim();
+      const tu = Number(tutar) || 0;
+      const ad = adet === null || adet === undefined || adet === "" ? "" : Number(adet);
+      return `${t}|${h}|${tu}|${ad}`;
     }
 
     async function handleFile(file) {
@@ -491,7 +591,7 @@
       rows.forEach((r, i) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td><input data-i="${i}" data-f="tarih" type="date" value="${r.tarih}"></td>
+          <td><input data-i="${i}" data-f="tarih" type="datetime-local" value="${r.tarih}"></td>
           <td><input data-i="${i}" data-f="hisse" value="${r.hisse}"></td>
           <td>
             <select data-i="${i}" data-f="tip">
@@ -559,17 +659,66 @@
       loadFromDriveSilent();
     }
 
+    function addManualTransaction() {
+      const tarih = $("addTarih").value;
+      const hisse = $("addHisse").value.toUpperCase().trim();
+      const tip = $("addTip").value;
+      const tutar = Number($("addTutar").value) || 0;
+      const adet = $("addAdet").value ? Number($("addAdet").value) : null;
+      const durum = $("addDurum").value;
+
+      if (!hisse) {
+        setStatus("Hisse kodu giriniz.", true);
+        return;
+      }
+      if (tutar <= 0) {
+        setStatus("Geçerli bir tutar giriniz.", true);
+        return;
+      }
+      if (!tarih) {
+        setStatus("Tarih ve saat seçiniz.", true);
+        return;
+      }
+
+      const tx = {
+        tarih: tarih,
+        hisse: hisse,
+        tip: tip,
+        tutar: tutar,
+        adet: adet,
+        durum: durum,
+        id: crypto.randomUUID()
+      };
+
+      transactions.push(tx);
+      persist();
+      populateFilters();
+      render();
+
+      // Formu temizle
+      $("addTarih").value = "";
+      $("addHisse").value = "";
+      $("addTutar").value = "";
+      $("addAdet").value = "";
+      $("addForm").classList.add("hidden");
+      $("toggleAddBtn").textContent = "+";
+
+      setStatus(`${hisse} işlemi eklendi.`);
+    }
+
     async function loadFromDriveSilent() {
       try {
         const resp = await fetch(API_URL + "?action=read");
         const data = await resp.json();
         if (data.error || !data.rows || !data.rows.length) return;
 
-        const existingIds = new Set(transactions.map(t => t.id));
+        const existingKeys = new Set(transactions.map(t => makeRowKey(t.tarih, t.hisse, t.tutar, t.adet)));
         let newCount = 0;
 
         for (const r of data.rows) {
-          if (r.id && !existingIds.has(r.id)) {
+          const key = makeRowKey(r.tarih, r.hisse, r.tutar, r.adet);
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
             transactions.push({
               tarih: r.tarih || "",
               hisse: (r.hisse || "").toUpperCase().trim(),
@@ -622,9 +771,15 @@
     function formatDate(iso) {
       if (!iso) return "—";
       const months = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
-      const [y, m, d] = iso.split("-").map(Number);
+      // datetime-local format: YYYY-MM-DDTHH:MM
+      const [datePart, timePart] = iso.split("T");
+      const [y, m, d] = datePart.split("-").map(Number);
       if (!y || !m || !d) return iso;
-      return `${d} ${months[m - 1]} ${y}`;
+      let result = `${d} ${months[m - 1]} ${y}`;
+      if (timePart) {
+        result += `, ${timePart}`;
+      }
+      return result;
     }
 
     async function deleteTx(id) {
@@ -774,11 +929,14 @@
           return;
         }
 
-        const existingIds = new Set(transactions.map(t => t.id));
+        // Mevcut işlemleri key'lere çevir (tekrar kontrolü için)
+        const existingKeys = new Set(transactions.map(t => makeRowKey(t.tarih, t.hisse, t.tutar, t.adet)));
         let newCount = 0;
 
         for (const r of driveRows) {
-          if (r.id && !existingIds.has(r.id)) {
+          const key = makeRowKey(r.tarih, r.hisse, r.tutar, r.adet);
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
             transactions.push({
               tarih: r.tarih || "",
               hisse: (r.hisse || "").toUpperCase().trim(),
