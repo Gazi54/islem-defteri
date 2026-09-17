@@ -453,11 +453,40 @@
     }
 
     function makeRowKey(tarih, hisse, tutar, adet) {
-      const t = (tarih || "").split("T")[0];
+      const t = normalizeDate(tarih);
       const h = (hisse || "").toUpperCase().trim();
       const tu = Number(tutar) || 0;
       const ad = adet === null || adet === undefined || adet === "" ? "" : Number(adet);
       return `${t}|${h}|${tu}|${ad}`;
+    }
+
+    function normalizeDate(dateStr) {
+      if (!dateStr) return "";
+      const s = String(dateStr).trim();
+
+      // Zaten YYYY-MM-DD formatındaysa
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        return s.split("T")[0];
+      }
+
+      // "Fri Sep 18 2026 02:44:00 GMT+0300 ..." formatını parse et
+      try {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${year}-${month}-${day}`;
+        }
+      } catch(e) {}
+
+      // "18.09.2026" veya "18/09/2026"
+      const dotMatch = s.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+      if (dotMatch) {
+        return `${dotMatch[3]}-${dotMatch[2].padStart(2, "0")}-${dotMatch[1].padStart(2, "0")}`;
+      }
+
+      return s.split("T")[0];
     }
 
     async function handleFile(file) {
