@@ -546,20 +546,28 @@
 
         // Mevcut işlemlerle tekrar kontrolü
         const existingKeys = new Set(transactions.map(t => makeRowKey(t.tarih, t.hisse, t.tutar, t.adet)));
-        const newRows = rows.filter(r => !existingKeys.has(makeRowKey(r.tarih, r.hisse, r.tutar, r.adet)));
-        const dupCount = rows.length - newRows.length;
+        
+        // Her satıra tekrar bayrağı ekle
+        const rowsWithFlag = rows.map(r => ({
+          ...r,
+          isDuplicate: existingKeys.has(makeRowKey(r.tarih, r.hisse, r.tutar, r.adet))
+        }));
 
-        if (newRows.length === 0) {
-          setStatus(`Görseldeki tüm işlemler zaten kayıtlı (${rows.length} tekrar bulundu).`, true);
-          return;
+        pendingRows = rowsWithFlag;
+        renderReview(rowsWithFlag);
+
+        const dupCount = rowsWithFlag.filter(r => r.isDuplicate).length;
+        const newCount = rowsWithFlag.length - dupCount;
+
+        let msg = `${rows.length} işlem okundu (${elapsed} sn).`;
+        if (dupCount > 0) {
+          msg += ` ⚠️ ${dupCount} tanesi mevcut işlemlerle aynı görünüyor (turuncu ile işaretli).`;
         }
-
-        pendingRows = newRows;
-        renderReview(newRows);
-        let msg = `${newRows.length} yeni işlem okundu (${elapsed} sn).`;
-        if (dupCount > 0) msg += ` ${dupCount} tekrar atlandı.`;
+        if (newCount > 0) {
+          msg += ` ${newCount} yeni işlem.`;
+        }
         msg += " Kaydetmeden önce kontrol edebilirsin.";
-        setStatus(msg);
+        setStatus(msg, dupCount > 0);
       } catch (err) {
         console.error(err);
         setStatus(err.message || "Okuma sırasında bir hata oluştu.", true);
@@ -672,9 +680,15 @@
 
       rows.forEach((r, i) => {
         const tr = document.createElement("tr");
+        if (r.isDuplicate) {
+          tr.style.background = "rgba(255, 165, 0, 0.15)";
+        }
         tr.innerHTML = `
           <td><input data-i="${i}" data-f="tarih" type="datetime-local" value="${r.tarih}"></td>
-          <td><input data-i="${i}" data-f="hisse" value="${r.hisse}"></td>
+          <td>
+            <input data-i="${i}" data-f="hisse" value="${r.hisse}">
+            ${r.isDuplicate ? '<span style="color:#f59e0b;font-size:11px;margin-left:4px;">⚠️ tekrar</span>' : ''}
+          </td>
           <td>
             <select data-i="${i}" data-f="tip">
               <option ${r.tip === "Alış" ? "selected" : ""}>Alış</option>
@@ -705,7 +719,8 @@
         });
       });
 
-      $("reviewCount").textContent = `${rows.length} satır`;
+      const dupCount = rows.filter(r => r.isDuplicate).length;
+      $("reviewCount").textContent = `${rows.length} satır${dupCount > 0 ? ` (${dupCount} tekrar)` : ''}`;
       $("reviewSection").classList.remove("hidden");
     }
 
@@ -716,11 +731,26 @@
     }
 
     function commitSave(rowsToSave) {
-      transactions = transactions.concat(rowsToSave);
+      // Tekrar olanları filtrele
+      const existingKeys = new Set(transactions.map(t => makeRowKey(t.tarih, t.hisse, t.tutar, t.adet)));
+      const newRows = rowsToSave.filter(r => !r.isDuplicate);
+      const skippedCount = rowsToSave.filter(r => r.isDuplicate).length;
+
+      if (newRows.length === 0) {
+        setStatus("Kaydedilecek yeni işlem yok (tümü tekrar).", true);
+        return;
+      }
+
+      transactions = transactions.concat(newRows);
       persist();
       pendingRows = [];
       $("reviewSection").classList.add("hidden");
-      setStatus(`${rowsToSave.length} işlem kaydedildi.`);
+
+      let msg = `${newRows.length} işlem kaydedildi.`;
+      if (skippedCount > 0) {
+        msg += ` ${skippedCount} tekrar atlandı.`;
+      }
+      setStatus(msg);
       populateFilters();
       render();
     }
