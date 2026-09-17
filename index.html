@@ -344,6 +344,7 @@
               <th>Tutar (₺)</th>
               <th>Adet</th>
               <th>Durum</th>
+              <th>Kayıt</th>
             </tr>
           </thead>
           <tbody id="reviewBody"></tbody>
@@ -550,7 +551,8 @@
         // Her satıra tekrar bayrağı ekle
         const rowsWithFlag = rows.map(r => ({
           ...r,
-          isDuplicate: existingKeys.has(makeRowKey(r.tarih, r.hisse, r.tutar, r.adet))
+          isDuplicate: existingKeys.has(makeRowKey(r.tarih, r.hisse, r.tutar, r.adet)),
+          userConfirmed: false
         }));
 
         pendingRows = rowsWithFlag;
@@ -704,11 +706,18 @@
               <option ${r.durum === "İptal Edildi" ? "selected" : ""}>İptal Edildi</option>
             </select>
           </td>
+          <td>
+            ${r.isDuplicate ? `<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);cursor:pointer;">
+              <input type="checkbox" data-i="${i}" data-f="userConfirmed" class="dup-check" ${r.userConfirmed ? 'checked' : ''}>
+              Kaydet
+            </label>` : '<span style="color:var(--gain);font-size:11px;">✓ yeni</span>'}
+          </td>
         `;
         tbody.appendChild(tr);
       });
 
-      tbody.querySelectorAll("input, select").forEach(el => {
+      // Input ve select listener'ları
+      tbody.querySelectorAll("input[data-f], select[data-f]").forEach(el => {
         el.addEventListener("input", e => {
           const i = +e.target.dataset.i;
           const f = e.target.dataset.f;
@@ -719,8 +728,16 @@
         });
       });
 
+      // Checkbox listener'ları (tekrar onay)
+      tbody.querySelectorAll(".dup-check").forEach(cb => {
+        cb.addEventListener("change", e => {
+          const i = +e.target.dataset.i;
+          pendingRows[i].userConfirmed = e.target.checked;
+        });
+      });
+
       const dupCount = rows.filter(r => r.isDuplicate).length;
-      $("reviewCount").textContent = `${rows.length} satır${dupCount > 0 ? ` (${dupCount} tekrar)` : ''}`;
+      $("reviewCount").textContent = `${rows.length} satır${dupCount > 0 ? ` (${dupCount} tekrar şüpheli)` : ''}`;
       $("reviewSection").classList.remove("hidden");
     }
 
@@ -731,24 +748,23 @@
     }
 
     function commitSave(rowsToSave) {
-      // Tekrar olanları filtrele
-      const existingKeys = new Set(transactions.map(t => makeRowKey(t.tarih, t.hisse, t.tutar, t.adet)));
-      const newRows = rowsToSave.filter(r => !r.isDuplicate);
-      const skippedCount = rowsToSave.filter(r => r.isDuplicate).length;
+      // Sadece tik'i işaretlenmiş olanları kaydet
+      const toSave = rowsToSave.filter(r => !r.isDuplicate || r.userConfirmed);
+      const skippedCount = rowsToSave.filter(r => r.isDuplicate && !r.userConfirmed).length;
 
-      if (newRows.length === 0) {
-        setStatus("Kaydedilecek yeni işlem yok (tümü tekrar).", true);
+      if (toSave.length === 0) {
+        setStatus("Kaydedilecek işlem yok. Tekrar şüphesi olan işlemlerin yanındaki tikleri işaretleyin.", true);
         return;
       }
 
-      transactions = transactions.concat(newRows);
+      transactions = transactions.concat(toSave);
       persist();
       pendingRows = [];
       $("reviewSection").classList.add("hidden");
 
-      let msg = `${newRows.length} işlem kaydedildi.`;
+      let msg = `${toSave.length} işlem kaydedildi.`;
       if (skippedCount > 0) {
-        msg += ` ${skippedCount} tekrar atlandı.`;
+        msg += ` ${skippedCount} tekrar şüpheli olan kaydedilmedi (tik işaretlenmedi).`;
       }
       setStatus(msg);
       populateFilters();
