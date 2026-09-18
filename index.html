@@ -210,6 +210,15 @@
       font-size: 13px; color: var(--muted); margin-top: 4px;
       font-family: "JetBrains Mono", monospace;
     }
+    .open-position {
+      font-size: 11px;
+      color: var(--gold);
+      margin-top: 6px;
+      padding: 4px 8px;
+      background: rgba(245, 158, 11, 0.1);
+      border-radius: 6px;
+      display: inline-block;
+    }
     .badge {
       font-size: 10px; padding: 3px 8px; border-radius: 20px;
       background: var(--surface-2); color: var(--muted);
@@ -1159,18 +1168,23 @@
                 </div>
                 <div class="summary-right">
                   <div class="amount">${fmtTL(s.buyTutar)}</div>
-                  <div class="percent">alım tutarı</div>
+                  <div class="percent">${s.openQty} adet · ort. ${fmtTL(s.avgBuy)}</div>
                 </div>
               </div>
             `;
           }
           const gain = s.karZarar >= 0;
           if (s.status === "precise") {
+            let openInfo = "";
+            if (s.openQty > 0) {
+              openInfo = `<div class="open-position">📦 Açık: ${s.openQty} adet · ${fmtTL(s.openTutar)}</div>`;
+            }
             return `
               <div class="summary-card">
                 <div class="summary-left">
                   <strong>${s.hisse}</strong>
                   <span class="note">${s.matchedQty} adet eşleşti · ort. alış ${fmtTL(s.avgBuy)} → satış ${fmtTL(s.avgSell)}</span>
+                  ${openInfo}
                 </div>
                 <div class="summary-right">
                   <div class="amount ${gain ? "gain" : "loss"}">${gain ? "+" : ""}${fmtTL(s.karZarar)}</div>
@@ -1179,11 +1193,16 @@
               </div>
             `;
           }
+          let openInfo = "";
+          if (s.openQty > 0) {
+            openInfo = `<div class="open-position">📦 Açık: ${s.openQty} adet · ${fmtTL(s.openTutar)}</div>`;
+          }
           return `
             <div class="summary-card">
               <div class="summary-left">
                 <strong>${s.hisse}<span class="badge">yaklaşık</span></strong>
                 <span class="note">Adet bilgisi eksik · tutar farkına göre</span>
+                ${openInfo}
               </div>
               <div class="summary-right">
                 <div class="amount ${gain ? "gain" : "loss"}">${gain ? "+" : ""}${fmtTL(s.karZarar)}</div>
@@ -1205,7 +1224,19 @@
         const buyTutar = buys.reduce((s, t) => s + t.tutar, 0);
         const sellTutar = sells.reduce((s, t) => s + t.tutar, 0);
 
-        if (!sells.length) return { hisse, status: "open", buyTutar };
+        // Açık pozisyon bilgisi (tüm alışlardan)
+        const totalBuyQty = buys.reduce((s, t) => s + (t.adet || 0), 0);
+        const totalSellQty = sells.reduce((s, t) => s + (t.adet || 0), 0);
+        const openQty = Math.max(0, totalBuyQty - totalSellQty);
+        const avgBuy = totalBuyQty > 0 ? buyTutar / totalBuyQty : 0;
+        const openTutar = openQty * avgBuy;
+
+        if (!sells.length) {
+          return {
+            hisse, status: "open",
+            buyTutar, openQty, avgBuy, openTutar
+          };
+        }
 
         const buyQtyKnown = buys.length > 0 && buys.every(t => t.adet !== null && t.adet > 0);
         const sellQtyKnown = sells.length > 0 && sells.every(t => t.adet !== null && t.adet > 0);
@@ -1213,15 +1244,25 @@
         if (buyQtyKnown && sellQtyKnown) {
           const buyQty = buys.reduce((s, t) => s + t.adet, 0);
           const sellQty = sells.reduce((s, t) => s + t.adet, 0);
-          const avgBuy = buyTutar / buyQty;
+          const avgBuyMatched = buyTutar / buyQty;
           const avgSell = sellTutar / sellQty;
           const matchedQty = Math.min(buyQty, sellQty);
-          const karZarar = (avgSell - avgBuy) * matchedQty;
-          const pct = (avgSell - avgBuy) / avgBuy * 100;
-          return { hisse, status: "precise", karZarar, pct, matchedQty, avgBuy, avgSell };
+          const karZarar = (avgSell - avgBuyMatched) * matchedQty;
+          const pct = (avgSell - avgBuyMatched) / avgBuyMatched * 100;
+          return {
+            hisse, status: "precise",
+            karZarar, pct, matchedQty,
+            avgBuy: avgBuyMatched, avgSell,
+            openQty, openTutar
+          };
         }
 
-        return { hisse, status: "approx", karZarar: sellTutar - buyTutar, buyTutar, sellTutar };
+        return {
+          hisse, status: "approx",
+          karZarar: sellTutar - buyTutar,
+          buyTutar, sellTutar,
+          openQty, openTutar
+        };
       });
     }
 
