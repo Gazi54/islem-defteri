@@ -159,22 +159,61 @@
 
     /* Summary */
     .summary-grid { display: flex; flex-direction: column; gap: 10px; }
+
+    /* Toplam K/Z */
+    .total-pnl {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+    .total-label {
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .total-value {
+      font-size: 24px;
+      font-weight: 700;
+      font-family: "JetBrains Mono", monospace;
+    }
+    .total-value.positive { color: var(--gain); }
+    .total-value.negative { color: var(--loss); }
     .summary-card {
       border: 1px solid var(--border); background: var(--surface);
-      border-radius: 12px; padding: 16px 18px;
+      border-radius: 12px; padding: 18px 20px;
       display: flex; justify-content: space-between;
       align-items: center; gap: 16px;
+      transition: all 0.2s ease;
     }
-    .summary-left strong { font-size: 15px; letter-spacing: 0.02em; }
-    .summary-left .note { display: block; font-size: 12px; color: var(--muted-2); margin-top: 4px; }
+    .summary-card:hover {
+      border-color: var(--gold);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .summary-left strong {
+      font-size: 16px; letter-spacing: 0.02em;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .summary-left .note { display: block; font-size: 12px; color: var(--muted-2); margin-top: 6px; }
     .summary-right { text-align: right; }
-    .summary-right .amount { font-size: 16px; font-weight: 700; }
+    .summary-right .amount {
+      font-size: 18px; font-weight: 700;
+      font-family: "JetBrains Mono", monospace;
+    }
     .summary-right .amount.gain { color: var(--gain); }
     .summary-right .amount.loss { color: var(--loss); }
-    .summary-right .percent { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .summary-right .percent {
+      font-size: 13px; color: var(--muted); margin-top: 4px;
+      font-family: "JetBrains Mono", monospace;
+    }
     .badge {
-      font-size: 11px; padding: 2px 8px; border-radius: 20px;
+      font-size: 10px; padding: 3px 8px; border-radius: 20px;
       background: var(--surface-2); color: var(--muted);
+      font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;
     }
 
     /* Ledger */
@@ -224,6 +263,21 @@
       font-size: 13px;
     }
     .bulk-actions.hidden { display: none; }
+
+    /* Filtrele Silme */
+    .filter-delete {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: rgba(212, 101, 94, 0.1);
+      border: 1px solid rgba(212, 101, 94, 0.3);
+      border-radius: 12px;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
+    .filter-delete.hidden { display: none; }
+    .filter-delete span { color: var(--muted); }
     .bulk-actions span { color: var(--muted); }
     .btn-danger {
       background: var(--loss);
@@ -416,6 +470,10 @@
 
     <section class="summary-section">
       <h2>Hisse Bazlı Kâr / Zarar</h2>
+      <div class="total-pnl" id="totalPnl">
+        <span class="total-label">Toplam Kâr / Zarar:</span>
+        <span class="total-value" id="totalPnlValue">₺0,00</span>
+      </div>
       <div class="summary-grid" id="summaryGrid">
         <div class="empty-state">Henüz veri yok</div>
       </div>
@@ -434,6 +492,10 @@
         <span id="selectedCount">0 seçili</span>
         <button class="btn btn-danger" id="bulkDeleteBtn">Seçilenleri Sil</button>
         <button class="btn btn-secondary" id="clearSelectionBtn">Seçimi Kaldır</button>
+      </div>
+      <div class="filter-delete hidden" id="filterDeleteActions">
+        <span id="filterInfo">Filtre aktif</span>
+        <button class="btn btn-danger" id="deleteFilteredBtn">Filtrelenenleri Tümünü Sil</button>
       </div>
       <div class="ledger" id="ledger">
         <div class="empty-state">Henüz kayıtlı işlem yok</div>
@@ -491,6 +553,16 @@
       if (BUY_TYPES.some(t => lower.includes(t))) return "Alış";
       if (SELL_TYPES.some(t => lower.includes(t))) return "Satış";
       return tip || "Diğer";
+    }
+
+    const PENDING_TYPES = ["bekliyor", "pending", "beklemede", "iptal edildi", "iptal"];
+    const COMPLETED_TYPES = ["gerçekleşti", "tamamlandı", "oldu", "yapıldı"];
+
+    function normalizeDurum(durum) {
+      const lower = (durum || "").toLowerCase().trim();
+      if (PENDING_TYPES.some(t => lower.includes(t))) return "Bekliyor";
+      if (COMPLETED_TYPES.some(t => lower.includes(t))) return "Gerçekleşti";
+      return durum || "Gerçekleşti";
     }
 
     function makeRowKey(tarih, hisse, tutar, adet) {
@@ -668,7 +740,7 @@
           tip: normalizeTip(r.tip),
           tutar: Number(r.tutar) || 0,
           adet: r.adet === null || r.adet === undefined ? null : Number(r.adet),
-          durum: r.durum || "Gerçekleşti",
+          durum: normalizeDurum(r.durum),
           id: crypto.randomUUID()
         })).filter(r => r.hisse);
       }
@@ -965,6 +1037,21 @@
       } else {
         $("bulkActions").classList.add("hidden");
       }
+
+      // Filtre aktif mi kontrol et
+      const hisse = $("filterHisse").value;
+      const start = $("filterStart").value;
+      const end = $("filterEnd").value;
+      const isFiltered = hisse || start || end;
+      const filteredCount = getFiltered().length;
+      const totalCount = transactions.length;
+
+      if (isFiltered && filteredCount > 0 && filteredCount < totalCount) {
+        $("filterDeleteActions").classList.remove("hidden");
+        $("filterInfo").textContent = `${filteredCount}/${totalCount} işlem filtrelenmis`;
+      } else {
+        $("filterDeleteActions").classList.add("hidden");
+      }
     }
 
     function bulkDelete() {
@@ -983,9 +1070,22 @@
       render();
     }
 
+    function deleteFiltered() {
+      const filtered = getFiltered();
+      if (!filtered.length) return;
+      if (!confirm(`${filtered.length} işlem silinecek. Emin misin?`)) return;
+      const filteredIds = new Set(filtered.map(t => t.id));
+      transactions = transactions.filter(t => !filteredIds.has(t.id));
+      persist();
+      populateFilters();
+      render();
+      setStatus(`${filtered.length} filtelenen işlem silindi.`);
+    }
+
     // Toplu silme butonları
     $("bulkDeleteBtn").addEventListener("click", bulkDelete);
     $("clearSelectionBtn").addEventListener("click", clearSelection);
+    $("deleteFilteredBtn").addEventListener("click", deleteFiltered);
 
     let selectedIds = new Set();
 
@@ -1036,6 +1136,15 @@
 
       const summaries = computeSummaries(rows);
       const sg = $("summaryGrid");
+
+      // Toplam K/Z hesapla
+      const totalPnl = summaries.reduce((sum, s) => {
+        if (s.status === "open") return sum;
+        return sum + (s.karZarar || 0);
+      }, 0);
+      const totalEl = $("totalPnlValue");
+      totalEl.textContent = (totalPnl >= 0 ? "+" : "") + fmtTL(totalPnl);
+      totalEl.className = "total-value " + (totalPnl >= 0 ? "positive" : "negative");
 
       if (!summaries.length) {
         sg.innerHTML = '<div class="empty-state">Filtreye uyan hisse yok</div>';
